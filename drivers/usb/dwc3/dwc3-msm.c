@@ -3862,6 +3862,51 @@ static ssize_t usb_data_enabled_store(struct device *dev,
 }
 static DEVICE_ATTR_RW(usb_data_enabled);
 
+struct platform_device *pdev_main = NULL;
+
+int okcar_usbmode_get(void) {
+	struct dwc3_msm	*mdwc;
+	if (pdev_main == NULL) {
+		return -1;
+	}
+	mdwc = platform_get_drvdata(pdev_main);	
+
+	if (mdwc->id_state == DWC3_ID_GROUND) {
+		return 2;
+	} else if (mdwc->id_state == DWC3_ID_FLOAT) {
+		return mdwc->vbus_active ? 1 : 0;
+	}
+
+	return -1;
+}
+EXPORT_SYMBOL(okcar_usbmode_get);
+
+void okcar_usbmode_toggle(int mode)
+{
+	struct dwc3_msm	*mdwc;
+	if (pdev_main == NULL) {
+		return;
+	}
+	mdwc = platform_get_drvdata(pdev_main);	
+
+	if (mode == 1) {
+		// Device
+		mdwc->vbus_active = true;
+		mdwc->id_state = DWC3_ID_FLOAT;
+	} else if ( mode == 2) {
+		// Host
+		mdwc->vbus_active = false;
+		mdwc->id_state = DWC3_ID_GROUND;
+	} else {
+		// None
+		mdwc->vbus_active = false;
+		mdwc->id_state = DWC3_ID_FLOAT;
+	}
+
+	dwc3_ext_event_notify(mdwc);
+}
+EXPORT_SYMBOL(okcar_usbmode_toggle);
+
 static int dwc_dpdm_cb(struct notifier_block *nb, unsigned long evt, void *p)
 {
 	struct dwc3_msm *mdwc = container_of(nb, struct dwc3_msm, dpdm_nb);
@@ -4344,7 +4389,8 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 	device_create_file(&pdev->dev, &dev_attr_usb_compliance_mode);
 	device_create_file(&pdev->dev, &dev_attr_bus_vote);
 	device_create_file(&pdev->dev, &dev_attr_usb_data_enabled);
-
+	pdev_main = pdev;
+	
 	return 0;
 
 err_get_extcon:
